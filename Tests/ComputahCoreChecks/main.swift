@@ -61,8 +61,10 @@ do {
 
     let defaultSpeech = try SpeechProviderConfiguration.resolve(nil)
     check(defaultSpeech == .deepgram, "default speech provider")
+    check(defaultSpeech.provider.recognitionLabel == "Deepgram Speech Recognition", "Deepgram label")
     let volc = try SpeechProviderConfiguration.resolve("volcengine")
     check(volc.provider == .volcengine, "Volcengine speech provider")
+    check(volc.provider.recognitionLabel == "Volcengine Speech Recognition", "Volcengine label")
     check(volc.credentialName == "VOLCENGINE_SPEECH_API_KEY", "Volcengine credential")
     check(volc.resourceID == "volc.seedasr.sauc.duration", "Volcengine resource")
     check(SpeechDiagnosticLimit.maximumPCMBytes == 960_000, "30-second speech diagnostic limit")

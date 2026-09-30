@@ -101,6 +101,7 @@ extension App {
             window.contentView = NSHostingView(
                 rootView: DebugPanel(
                     state: debugState, costs: jevCosts, speechCosts: speechCosts,
+                    speechProvider: (try? speechConfiguration().provider) ?? .deepgram,
                     toggleListening: { [weak self] in self?.toggleVoice() },
                     beginCommand: { [weak self] in self?.beginDebugCommand() },
                     submitCommand: { [weak self] text in self?.submitDebugCommand(text) }))

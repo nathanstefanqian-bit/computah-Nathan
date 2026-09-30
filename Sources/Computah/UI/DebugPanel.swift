@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import ComputahCore
+import ComputahSpeech
 
 @MainActor final class DebugReviewState: ObservableObject {
     @Published var status = "Ready"
@@ -23,6 +24,7 @@ struct DebugPanel: View {
     @ObservedObject var state: DebugReviewState
     let costs: JevCostStore
     let speechCosts: SpeechCostStore
+    let speechProvider: SpeechProvider
     @State private var selection: String?
     @State private var command = ""
     @FocusState private var commandFocused: Bool
@@ -78,7 +80,7 @@ struct DebugPanel: View {
                         .disabled(command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
                 JevCostView(store: costs)
-                SpeechCostView(store: speechCosts)
+                SpeechCostView(store: speechCosts, provider: speechProvider)
                 Text("Run hides this panel while the command executes. Reopen Debug Mode to check the result.")
                     .font(.caption).foregroundStyle(.secondary)
             }.padding(20)
@@ -257,14 +259,19 @@ private struct RunReview: View {
 
 struct SpeechCostView: View {
     @ObservedObject var store: SpeechCostStore
+    let provider: SpeechProvider
     @State private var confirmingReset = false
 
     var body: some View {
         HStack {
-            Label("Speech usage", systemImage: "waveform")
-                .help("Saves aggregate Volcengine audio duration and a price estimate. No audio or transcripts are stored.")
+            Label(provider.recognitionLabel, systemImage: "waveform")
+                .help(provider == .volcengine
+                    ? "Saves aggregate Volcengine audio duration and a price estimate. No audio or transcripts are stored."
+                    : "Deepgram usage is not tracked by this local counter.")
             Spacer()
-            if store.total.sessions > 0 {
+            if provider != .volcengine {
+                Text("Usage not tracked").font(.caption).foregroundStyle(.secondary)
+            } else if store.total.sessions > 0 {
                 Text(String(
                     format: "%.1f s · ¥%.6f estimated",
                     store.total.audioSeconds, store.total.estimatedCNY))

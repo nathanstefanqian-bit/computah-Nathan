@@ -3,6 +3,13 @@ import Foundation
 public enum SpeechProvider: String, Codable, Sendable {
     case deepgram
     case volcengine
+
+    public var recognitionLabel: String {
+        switch self {
+        case .deepgram: return "Deepgram Speech Recognition"
+        case .volcengine: return "Volcengine Speech Recognition"
+        }
+    }
 }
 
 public enum SpeechDiagnosticLimit {
