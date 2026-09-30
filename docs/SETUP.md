@@ -56,9 +56,24 @@ This variable tells the app where to find `.env` and where to save optional debu
 ## Signing
 
 The build uses `COMPUTAH_CODESIGN_IDENTITY` when you set it.
-Otherwise, it uses the first local signing identity.
-If no identity is available, it uses an ad-hoc signature.
-A stable identity helps macOS retain app permissions between builds.
+Otherwise, it prefers the local `Computah Local Code Signing` identity, then the first valid
+Apple signing identity.
+
+Create the local identity once:
+
+```sh
+zsh scripts/setup-local-codesign.sh
+```
+
+This creates a self-signed code-signing certificate and private key in your login keychain.
+They stay on this Mac and are not added to the repository.
+After the next build, remove the old Computah entry from Accessibility, add
+`outputs/Computah.app` again, and enable it. Later builds signed with the same identity retain
+that permission.
+
+If no stable identity is available, the build warns and uses an ad-hoc signature.
+An ad-hoc signature changes identity on every rebuild, so macOS will not retain Accessibility
+permission.
 
 ## Slow or incomplete commands
 

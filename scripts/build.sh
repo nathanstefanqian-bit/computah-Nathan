@@ -29,9 +29,21 @@ with open(sys.argv[1], 'wb') as output:
         'NSMicrophoneUsageDescription': 'Computah sends microphone audio to your configured speech provider while dictation is on.',
     }, output)
 PY
-# Retain the existing app identity so a rename does not intentionally reset macOS permissions.
-signing_identity="${COMPUTAH_CODESIGN_IDENTITY:-$(security find-identity -v -p codesigning | awk '$1 ~ /^[0-9]+\)$/ {print $2; exit}')}"
-if [[ -z "$signing_identity" ]]; then signing_identity="-"; fi
+# A stable identity keeps macOS TCC permissions valid across rebuilds.
+local_identity="Computah Local Code Signing"
+if [[ -n "${COMPUTAH_CODESIGN_IDENTITY:-}" ]]; then
+    signing_identity="$COMPUTAH_CODESIGN_IDENTITY"
+elif security find-identity -p codesigning | awk -F'"' -v name="$local_identity" '$2 == name { found=1 } END { exit !found }'; then
+    signing_identity="$local_identity"
+else
+    signing_identity="$(security find-identity -v -p codesigning | awk -F'"' '$2 != "" {print $2; exit}')"
+fi
+if [[ -z "$signing_identity" ]]; then
+    signing_identity="-"
+    print -u2 "Warning: using ad-hoc signing. Accessibility permission will not survive a rebuild."
+    print -u2 "Run zsh scripts/setup-local-codesign.sh once to create a stable local identity."
+fi
 codesign --force --sign "$signing_identity" --timestamp=none "$app_dir"
 codesign --verify --strict "$app_dir"
 print "Built $app_dir"
+print "Signed with $signing_identity"
