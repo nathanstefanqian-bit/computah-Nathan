@@ -2,7 +2,12 @@
 
 # Computah
 
-An experimental project to learn about TypeSafe's Jev.
+<p align="center">
+  <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a>
+</p>
+
+A Chinese-localized fork of [musubipapi/computah](https://github.com/musubipapi/computah):
+an experimental native macOS voice agent built around TypeSafe's Jev.
 
 Control your Mac with your voice.
 
@@ -16,6 +21,24 @@ Voice input supports Volcengine Doubao Streaming Speech Recognition 2.0 and Deep
 
 **This is an experiment.** Some apps provide incomplete controls. The model can
 choose the wrong action. Check the results before you trust Computah with important work.
+
+## Changes in this fork
+
+This fork is maintained by Nathan Qian with a focus on Chinese-language use and
+everyday productivity workflows in China.
+
+- Added Volcengine Doubao Streaming Speech Recognition 2.0 with second-pass final transcripts.
+- Kept Deepgram as a configurable speech-provider fallback.
+- Added OpenRouter as an alternative Jev provider while retaining direct TypeSafe access.
+- Added aggregate Jev and Volcengine usage and cost tracking.
+- Added a hard three-request Jev limit for live diagnostics.
+- Improved Chinese text-entry target selection without app-name or command-keyword routing.
+- Added visible command progress, completion, and clarification feedback in the notch.
+- Added offline checks for provider configuration, protocol frames, transcript handling,
+  request budgets, and cost accounting.
+
+The project remains provider-backed and experimental. Chinese office-app coverage is
+being expanded incrementally and does not imply reliable support for every workflow.
 
 ## How it works
 
@@ -148,6 +171,16 @@ then fill in that provider's API key. Select `SPEECH_PROVIDER=volcengine` or
 `SPEECH_PROVIDER=deepgram` and fill in its matching key.
 Do not share this file. A speech key is optional if you only use typed commands in Debug Mode.
 
+Example:
+
+```dotenv
+JEV_PROVIDER=openrouter
+OPENROUTER_API_KEY=
+SPEECH_PROVIDER=volcengine
+VOLCENGINE_SPEECH_API_KEY=
+VOLCENGINE_SPEECH_RESOURCE_ID=volc.seedasr.sauc.duration
+```
+
 Build and open the app:
 
 ```sh
@@ -211,4 +244,7 @@ See [setup help](docs/SETUP.md) if the app does not respond.
 
 ## License
 
-[MIT](LICENSE). The bundled sounds include their [Cuelume license](Sources/Computah/Resources/Sounds/Cuelume-LICENSE.txt).
+[MIT](LICENSE). This fork preserves attribution to the
+[original Computah project](https://github.com/musubipapi/computah) and its contributors.
+The bundled sounds include their
+[Cuelume license](Sources/Computah/Resources/Sounds/Cuelume-LICENSE.txt).
