@@ -54,9 +54,12 @@ The app-facing callbacks remain stable so command coordination and UI code do no
    - `show_utterances=true`
    - `end_window_size=800`
 5. Display interim recognition immediately.
-6. Submit to Computah only after Volcengine returns a definite second-pass result.
+6. Use a provider `prefetch` hint to prepare a read-only Jev plan.
+7. Submit to Computah only after Volcengine returns a definite second-pass result.
 
-Volcengine interim text does not trigger eager Jev planning. This favors accuracy and cost control over the small latency benefit of speculative planning.
+Prefetch planning never sends app input. If later interim text changes, Computah cancels the
+speculative plan. A definite result may reuse it only when the text is exact or differs solely
+by trailing punctuation, and only for a plan without a literal input value.
 
 ## Cost Control
 

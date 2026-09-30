@@ -19,6 +19,7 @@ final class VolcengineSpeechSession: SpeechProviderSession {
     private var lastSequence = 0
     private var beganTurns = Set<String>()
     private var finalizedUtterances = Set<String>()
+    private var prefetchTracker = VolcenginePrefetchTracker()
     private let packetBytes = 16_000 * 2 / 5
 
     init(endpoint: URL, key: String, resourceID: String) {
@@ -109,6 +110,17 @@ final class VolcengineSpeechSession: SpeechProviderSession {
             begin(turnID, events: &events)
             events.append(.text(
                 transcript.text, final: transcript.final, turnID: turnID))
+            for transition in prefetchTracker.transitions(
+                turnID: turnID, text: transcript.text,
+                final: transcript.final, prefetch: decoded.prefetch
+            ) {
+                switch transition {
+                case .cancel:
+                    events.append(.resumed)
+                case .prepare(let text):
+                    events.append(.eager(text, turnID: turnID))
+                }
+            }
         }
         return events
     }

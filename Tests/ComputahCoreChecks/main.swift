@@ -113,6 +113,7 @@ do {
     check(interim.transcripts.count == 1, "empty transcripts must be rejected")
     check(interim.transcripts[0].final == false, "interim transcript")
     check(interim.audioMilliseconds == 1_000, "utterance duration")
+    check(interim.prefetch == false, "ordinary interim must not prefetch")
 
     let definite = VolcengineTranscriptDecoder.decode([
         "result": ["utterances": [
@@ -125,6 +126,46 @@ do {
         "result": ["text": "写入今天的计划"],
     ], finalFrame: true)
     check(finalFallback.transcripts.first?.final == true, "final-frame fallback transcript")
+
+    let prefetch = VolcengineTranscriptDecoder.decode([
+        "result": [
+            "prefetch": true,
+            "utterances": [
+                ["text": "打开 Photo Booth", "start_time": 0, "end_time": 1_200, "definite": false],
+            ],
+        ],
+    ], finalFrame: false)
+    check(prefetch.prefetch == true, "Volcengine prefetch hint")
+    check(prefetch.transcripts.first?.final == false, "prefetch remains non-final")
+
+    var prefetchTracker = VolcenginePrefetchTracker()
+    check(
+        prefetchTracker.transitions(
+            turnID: "turn", text: "打开 Photo Booth", final: false, prefetch: true)
+            == [.prepare("打开 Photo Booth")],
+        "prefetch starts speculative preparation")
+    check(
+        prefetchTracker.transitions(
+            turnID: "turn", text: "打开 Photo Booth 然后", final: false, prefetch: false)
+            == [.cancel],
+        "changed interim text cancels speculative preparation")
+    check(
+        prefetchTracker.transitions(
+            turnID: "turn", text: "打开 Photo Booth", final: true, prefetch: false).isEmpty,
+        "final text only clears prefetch state")
+
+    check(
+        EagerPreparationMatch.canReuse(
+            prepared: "打开 Photo Booth", final: "打开 Photo Booth。"),
+        "terminal punctuation may reuse a no-value eager plan")
+    check(
+        !EagerPreparationMatch.canReuse(
+            prepared: "打开 Photo Booth", final: "打开 Photo Booth，然后拍照。"),
+        "new instruction content must invalidate an eager plan")
+    check(
+        !EagerPreparationMatch.canReuse(
+            prepared: "打开 Photo Booth", final: "打开备忘录。"),
+        "changed target must invalidate an eager plan")
 
     let projectRoot = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()

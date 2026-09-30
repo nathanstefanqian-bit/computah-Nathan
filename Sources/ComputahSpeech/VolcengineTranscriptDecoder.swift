@@ -10,6 +10,37 @@ public struct VolcengineTranscript: Equatable {
 public struct VolcengineTranscriptResult: Equatable {
     public let transcripts: [VolcengineTranscript]
     public let audioMilliseconds: Double
+    public let prefetch: Bool
+}
+
+public enum VolcenginePrefetchTransition: Equatable {
+    case cancel
+    case prepare(String)
+}
+
+public struct VolcenginePrefetchTracker {
+    private var textByTurn: [String: String] = [:]
+
+    public init() {}
+
+    public mutating func transitions(
+        turnID: String, text: String, final: Bool, prefetch: Bool
+    ) -> [VolcenginePrefetchTransition] {
+        if final {
+            textByTurn.removeValue(forKey: turnID)
+            return []
+        }
+        var result: [VolcenginePrefetchTransition] = []
+        if let previous = textByTurn[turnID], previous != text {
+            textByTurn.removeValue(forKey: turnID)
+            result.append(.cancel)
+        }
+        if prefetch, textByTurn[turnID] != text {
+            textByTurn[turnID] = text
+            result.append(.prepare(text))
+        }
+        return result
+    }
 }
 
 public enum VolcengineTranscriptDecoder {
@@ -50,7 +81,8 @@ public enum VolcengineTranscriptDecoder {
             milliseconds,
             utterances.compactMap { double($0["end_time"]) }.max() ?? 0)
         return VolcengineTranscriptResult(
-            transcripts: transcripts, audioMilliseconds: milliseconds)
+            transcripts: transcripts, audioMilliseconds: milliseconds,
+            prefetch: boolean(result?["prefetch"] ?? payload["prefetch"]))
     }
 
     private static func integer(_ value: Any?) -> Int? {

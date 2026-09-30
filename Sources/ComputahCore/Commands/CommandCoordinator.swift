@@ -96,7 +96,10 @@ public struct CommandTurnResult: Codable {
         beginTurn(id)
         finalized.append(id)
         if finalized.count > 128 { finalized.removeFirst() }
-        let ready = eagerText == text ? eager : nil
+        let eagerSource = eagerText
+        let ready = eagerSource.map {
+            EagerPreparationMatch.canReuse(prepared: $0, final: text)
+        } == true ? eager : nil
         if ready == nil { discardEager() } else { eager = nil; eagerText = nil }
         let ticket = permit
         let prior = checkpoint
@@ -124,7 +127,18 @@ public struct CommandTurnResult: Codable {
                 try ticket.check()
                 let initial: PreparedAction
                 if let ready {
-                    initial = try await withTaskCancellationHandler { try await ready.value } onCancel: { ready.cancel() }
+                    let speculative = try await withTaskCancellationHandler {
+                        try await ready.value
+                    } onCancel: {
+                        ready.cancel()
+                    }
+                    if let rebound = speculative.rebindingEagerSource(to: text) {
+                        initial = rebound
+                    } else {
+                        initial = try await prepareFresh(
+                            text, ticket: ticket, relationship: relationship,
+                            conversation: conversation)
+                    }
                 } else {
                     initial = try await prepareFresh(text, ticket: ticket, relationship: relationship, conversation: conversation)
                 }

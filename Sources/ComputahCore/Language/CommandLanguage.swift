@@ -82,6 +82,26 @@ struct InterpretedCommand {
         return SensitiveText.protectedRanges(in: original).contains { NSIntersectionRange($0, valueRange).length > 0 }
             ? SensitiveText.redact(original, range: valueRange) : value
     }
+
+    func rebindingEagerSource(to finalSource: String) -> InterpretedCommand? {
+        if source == finalSource { return self }
+        guard format == .absent, value == nil,
+              EagerPreparationMatch.canReuse(prepared: source, final: finalSource),
+              clause.startUTF16 == 0, clause.endUTF16 == (source as NSString).length,
+              followupStartUTF16 == nil else { return nil }
+        var rebound = InterpretedCommand(
+            source: finalSource,
+            clause: CommandClause(
+                text: finalSource, startUTF16: 0,
+                endUTF16: (finalSource as NSString).length),
+            route: route, app: app, format: format, valueRange: nil, value: nil)
+        rebound.relationship = relationship
+        rebound.valueSource = valueSource == source ? finalSource : valueSource
+        rebound.actionID = actionID
+        rebound.activatesApp = activatesApp
+        rebound.valueIsNormalized = valueIsNormalized
+        return rebound
+    }
 }
 
 private struct ValueSelection {

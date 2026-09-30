@@ -36,6 +36,14 @@ public struct PreparedAction {
         }
     }
 
+    func rebindingEagerSource(to finalSource: String) -> PreparedAction? {
+        guard let reboundInterpretation = interpretation?.rebindingEagerSource(to: finalSource) else {
+            return nil
+        }
+        var rebound = self
+        rebound.interpretation = reboundInterpretation
+        return rebound
+    }
 }
 
 enum ObservationRequest { case initial, recovery(pid_t), expanded(pid_t), region(AXSnapshot, Int), verification(pid_t) }
