@@ -177,11 +177,14 @@ public struct CommandEngine {
             return prepared(status: "Goal relationship: " + relationship.rawValue)
         }
         if interpreted.activatesApp {
-            guard let app = interpreted.app else { return prepared(status: "The requested app is unclear or unavailable.") }
+            guard let app = interpreted.app else {
+                return prepared(status: "I couldn't identify the target app. Please name it and try again.")
+            }
             return prepared(launch: app, description: "Open \(app.name)")
         }
         if interpreted.route == nil {
-            return prepared(status: "No clear action requested.")
+            return prepared(
+                status: "I couldn't determine a safe action. Please state the target and what should happen.")
         }
         if interpreted.route == .controls {
             var selected = interpreted.actionID
@@ -202,7 +205,9 @@ public struct CommandEngine {
                 return prepared(status: "Requested state needs fresh confirmation.", description: "Already satisfied — verify without input")
             }
             guard let candidate = scope.first(where: { $0.id == selected }) else {
-                return prepared(status: captureFailure ?? "No matching control found after bounded observation; no further input sent.")
+                return prepared(
+                    status: captureFailure
+                        ?? "I couldn't identify a safe target or control. Please specify the target and try again.")
             }
             guard eligible(candidate) else {
                 throw JevFailure.invalid("The selected action and source value disagree.")

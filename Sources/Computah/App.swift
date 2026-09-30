@@ -11,6 +11,7 @@ import ComputahSpeech
     let debugState = DebugReviewState()
     var transcript = ""
     var status = "Ready"
+    var feedback: String?
     var recentRuns: [RunRecord] = []
     var running = false
     lazy var coordinator = CommandCoordinator(engine: engine, auditLimit: diagnosticAuditLimit)
@@ -44,6 +45,10 @@ import ComputahSpeech
         if startDiagnosticIfRequested() { return }
         coordinator.onStatus = { [weak self] message, active in
             self?.status = message; self?.running = active; self?.refresh()
+        }
+        coordinator.onFeedback = { [weak self] message in
+            self?.feedback = message
+            self?.refresh()
         }
         coordinator.onResult = { [weak self] result, current in
             guard let self else { return }
@@ -141,7 +146,7 @@ import ComputahSpeech
     func refresh() {
         let speechReady = (try? speechSetup()) != nil
         listeningSounds?.update(listening: voice.isListening)
-        notch?.update(listening: voice.isListening, transcript: transcript,
+        notch?.update(listening: voice.isListening, transcript: transcript, feedback: feedback,
                       needsSetup: !speechReady || engine.selector.apiKey.isEmpty
                         || engine.selector.setupError != nil)
         debugState.update(status: status, transcript: transcript,

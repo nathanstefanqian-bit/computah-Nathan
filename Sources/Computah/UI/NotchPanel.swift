@@ -108,10 +108,12 @@ struct NotchHoverState {
         position(animated: false)
         panel.orderFrontRegardless()
     }
-    func update(listening: Bool, transcript: String, needsSetup: Bool) {
+    func update(listening: Bool, transcript: String, feedback: String?, needsSetup: Bool) {
         let changed = self.listening != listening
         self.listening = listening
-        surface.update(listening: listening, transcript: transcript, needsSetup: needsSetup)
+        surface.update(
+            listening: listening, transcript: transcript, feedback: feedback,
+            needsSetup: needsSetup)
         if changed { position(animated: true) }
     }
     private func position(animated: Bool) {
@@ -261,6 +263,7 @@ struct NotchHoverState {
     private var displayedLevel = 0.0
     private var listening = false
     private var transcript = ""
+    private var feedback: String?
     private var needsSetup = false
     private var contentOpacity: CGFloat = 0
     private var revealStarted: Double?
@@ -329,13 +332,15 @@ struct NotchHoverState {
         if let event = NSApp.currentEvent { showMenu?(event) }
         else { debug?() }
     }
-    func update(listening: Bool, transcript: String, needsSetup: Bool) {
+    func update(listening: Bool, transcript: String, feedback: String?, needsSetup: Bool) {
         self.listening = listening
         self.needsSetup = needsSetup
-        if transcript != self.transcript {
+        let oldDisplayText = displayText
+        self.feedback = feedback
+        if transcript != self.transcript || displayText != oldDisplayText {
             self.transcript = transcript
             // A shorter phrase/correction must not remain scrolled beyond its end.
-            let width = (transcript as NSString).size(withAttributes: textAttributes).width
+            let width = (displayText as NSString).size(withAttributes: textAttributes).width
             offset = min(offset, max(0, width - textWindow.width + 4))
         }
         control.image = NSImage(
@@ -344,9 +349,11 @@ struct NotchHoverState {
         control.contentTintColor = accent
         control.setAccessibilityLabel(
             needsSetup ? "Add API keys to .env" : listening ? "Stop listening" : "Start listening")
-        setAccessibilityValue(transcript.isEmpty ? (listening ? "Listening" : "Ready") : transcript)
+        setAccessibilityValue(
+            displayText.isEmpty ? (listening ? "Listening" : "Ready") : displayText)
         needsDisplay = true
     }
+    private var displayText: String { feedback ?? transcript }
     override func layout() {
         super.layout()
         // Keep the menu-bar strip clear throughout the frame animation too,
@@ -426,7 +433,7 @@ struct NotchHoverState {
         }
         displayedLevel +=
             (audioLevel - displayedLevel) * min(1, elapsed * (audioLevel > displayedLevel ? 20 : 7))
-        let width = (transcript as NSString).size(withAttributes: textAttributes).width
+        let width = (displayText as NSString).size(withAttributes: textAttributes).width
         let target = max(0, width - textWindow.width + 4)
         // Only transcript growth moves the line. There is no timed sweep or
         // replay: after the newest words settle, a pause stays visually still.
@@ -473,11 +480,11 @@ struct NotchHoverState {
                 needsSetup
                 ? "Add API keys to .env"
                 : listening ? "Go ahead, I’m listening…" : "Control + Option to begin"
-            let text = transcript.isEmpty ? placeholder : transcript
+            let text = displayText.isEmpty ? placeholder : displayText
             var attributes = textAttributes
-            if transcript.isEmpty { attributes[.foregroundColor] = NSColor(white: 0.6, alpha: 1) }
+            if displayText.isEmpty { attributes[.foregroundColor] = NSColor(white: 0.6, alpha: 1) }
             (text as NSString).draw(
-                at: NSPoint(x: textWindow.minX - (transcript.isEmpty ? 0 : offset), y: textWindow.minY + 2),
+                at: NSPoint(x: textWindow.minX - (displayText.isEmpty ? 0 : offset), y: textWindow.minY + 2),
                 withAttributes: attributes)
             NSGraphicsContext.restoreGraphicsState()
         }

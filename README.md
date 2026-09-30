@@ -162,6 +162,7 @@ The app appears at the top of your screen.
 
 - Press **Control + Option** together to start or stop listening.
 - Move the pointer over the notch to see the transcript and listening controls.
+- After submission, the notch shows whether Computah is working, completed, or needs clearer input.
 - Open the **…** menu to select **Open Debug Mode…**.
 - In Debug Mode, type a command and select **Run**, or press **Return**.
 - Run hides the debug panel while the command executes.

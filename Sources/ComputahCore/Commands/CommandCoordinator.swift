@@ -15,6 +15,7 @@ public struct CommandTurnResult: Codable {
 /// are never placed into an automatic FIFO.
 @MainActor public final class CommandCoordinator {
     public var onStatus: ((String, Bool) -> Void)?
+    public var onFeedback: ((String?) -> Void)?
     public var onRelationship: ((GoalRelationship) -> Void)?
     public var inputAudit: [InputAuditEvent] { gate.events() }
     public var inputEffectCount: Int { gate.effectCount }
@@ -55,6 +56,7 @@ public struct CommandTurnResult: Codable {
         try? checkpoint?.authorize(permit)
         task?.cancel()
         running = false
+        onFeedback?(nil)
         onStatus?("Listening to the new request…", false)
     }
 
@@ -106,6 +108,7 @@ public struct CommandTurnResult: Codable {
         activeSubmission = id
         onTurnStarted?(id)
         running = true
+        onFeedback?("Finding an action…")
         onStatus?("Finding an action…", true)
         task = Task { [weak self] in
             guard let self else { return }
@@ -249,6 +252,7 @@ public struct CommandTurnResult: Codable {
         guard (try? ticket.check()) != nil else { return }
         running = false
         finishTurn(outcome, status: message)
+        onFeedback?(message)
         onStatus?(message, false)
     }
 

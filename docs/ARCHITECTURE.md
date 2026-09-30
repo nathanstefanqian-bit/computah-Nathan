@@ -6,7 +6,8 @@ A target is a module that Swift builds separately.
 `ComputahSpeech` owns speech-provider configuration and protocol codecs.
 `ComputahCore` reads app controls, asks Jev questions, and runs commands.
 The core does not import the interface or speech code.
-The notch shows transcripts and listening controls. It does not accept keyboard input.
+The notch shows live transcripts, command status feedback, and listening controls.
+It does not accept keyboard input.
 Typed commands are available in Debug Mode.
 Folders within the core organize responsibilities. They are not separate modules.
 

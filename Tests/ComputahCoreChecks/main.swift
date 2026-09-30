@@ -141,6 +141,12 @@ do {
     check(
         prompts["operation_pressClick"]?.contains("already selected container") == true,
         "selected containers must not replace available text entry")
+    check(
+        prompts["action"]?.contains("currently open conversation can be the intended destination") == true,
+        "an identified current conversation may receive an unnamed send request")
+    check(
+        prompts["action"]?.contains("never search for, choose, or infer a different recipient") == true,
+        "an unnamed send request must not infer another recipient")
 } catch {
     fputs("FAIL: \(error.localizedDescription)\n", stderr)
     exit(1)
