@@ -2,6 +2,7 @@ import Foundation
 
 /// Parse once. Launch flags are a CLI protocol, never natural-language intent.
 struct LaunchOptions {
+    static let liveJevRequestLimit = 3
     static let current = LaunchOptions(Array(CommandLine.arguments.dropFirst()))
     private var values: [String: String] = [:]
     private var flags: Set<String> = []
@@ -54,4 +55,7 @@ struct LaunchOptions {
 
     func value(_ name: String) -> String? { values[name] }
     func contains(_ name: String) -> Bool { flags.contains(name) || values[name] != nil }
+    var isLiveDiagnostic: Bool {
+        ["--scenario", "--audio-pcm", "--command"].contains { values[$0] != nil }
+    }
 }

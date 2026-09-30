@@ -1,5 +1,6 @@
 import AppKit
 import ComputahCore
+import ComputahSpeech
 
 @MainActor final class App: NSObject, NSApplicationDelegate {
     let voice = Voice()
@@ -16,8 +17,25 @@ import ComputahCore
     var typedTurnID = UUID().uuidString
     var appBeforeReview: NSRunningApplication?
     lazy var jevCosts = JevCostStore(file: root.appendingPathComponent("outputs/computah/jev-costs.json"))
+    lazy var speechCosts = SpeechCostStore(
+        file: root.appendingPathComponent("outputs/computah/speech-costs.json"))
     lazy var engine: CommandEngine = {
-        var selector = JevSelector(apiKey: credential("TYPESAFE_API_KEY") ?? "")
+        let configuration: JevProviderConfiguration
+        do {
+            configuration = try JevProviderConfiguration.resolve(credential("JEV_PROVIDER"))
+        } catch {
+            var selector = JevSelector(apiKey: "", credentialName: "JEV_PROVIDER")
+            selector.setupError = error.localizedDescription
+            return CommandEngine(selector: selector)
+        }
+        var selector = JevSelector(
+            apiKey: credential(configuration.credentialName) ?? "",
+            model: configuration.model,
+            endpoint: configuration.endpoint,
+            credentialName: configuration.credentialName)
+        if LaunchOptions.current.isLiveDiagnostic {
+            selector.requestBudget = JevRequestBudget(limit: LaunchOptions.liveJevRequestLimit)
+        }
         selector.costs = jevCosts.tracker
         return CommandEngine(selector: selector)
     }()
@@ -33,7 +51,9 @@ import ComputahCore
             record(RunRecord(command: result.command, status: result.status,
                 observation: last?.after.isEmpty == false ? last?.after : last?.before,
                 action: result.events.map(\.action).joined(separator: " → "), requests: result.requests,
-                inputTokens: result.inputTokens, elapsed: result.elapsed, recordedAt: Date(), events: result.events, complete: result.complete))
+                inputTokens: result.inputTokens, actualCostUSD: result.actualCostUSD,
+                estimatedCostUSD: result.estimatedCostUSD, elapsed: result.elapsed,
+                recordedAt: Date(), events: result.events, complete: result.complete))
         }
         coordinator.beforeObservation = { [weak self] permit in
             guard let self, NSWorkspace.shared.frontmostApplication?.processIdentifier == ProcessInfo.processInfo.processIdentifier,
@@ -75,19 +95,22 @@ import ComputahCore
             self?.refresh()
         }
         voice.onLevel = { [weak self] level in self?.notch?.audioLevel(level) }
+        voice.onUsage = { [weak self] usage in self?.speechCosts.record(usage) }
     }
 
     func toggleVoice() {
         if voice.isListening { discardPreparation(); voice.stop(); return }
-        guard let key = credential("DEEPGRAM_API_KEY") else {
-            status = "Add DEEPGRAM_API_KEY to the project-root .env file."
+        let setup: (SpeechProviderConfiguration, String)
+        do { setup = try speechSetup() }
+        catch {
+            status = error.localizedDescription
             refresh()
             showReview()
             return
         }
         transcript = ""
         coordinator.beginTurn("listening:" + UUID().uuidString)
-        voice.start(key: key)
+        voice.start(configuration: setup.0, key: setup.1)
     }
 
     func discardPreparation() { coordinator.discardEager() }
@@ -116,9 +139,11 @@ import ComputahCore
     }
 
     func refresh() {
+        let speechReady = (try? speechSetup()) != nil
         listeningSounds?.update(listening: voice.isListening)
         notch?.update(listening: voice.isListening, transcript: transcript,
-                      needsSetup: credential("DEEPGRAM_API_KEY") == nil || credential("TYPESAFE_API_KEY") == nil)
+                      needsSetup: !speechReady || engine.selector.apiKey.isEmpty
+                        || engine.selector.setupError != nil)
         debugState.update(status: status, transcript: transcript,
                           listening: voice.isListening, running: running)
     }
@@ -127,6 +152,7 @@ import ComputahCore
         coordinator.shutdown()
         voice.stop()
         jevCosts.flush()
+        speechCosts.flush()
         shortcut?.stop()
         notch?.close()
     }

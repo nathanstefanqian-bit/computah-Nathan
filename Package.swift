@@ -7,8 +7,11 @@ let package = Package(
     products: [.executable(name: "Computah", targets: ["Computah"])],
     targets: [
         .target(name: "ComputahCore", resources: [.process("Prompts")]),
-        .executableTarget(name: "Computah", dependencies: ["ComputahCore"],
+        .target(name: "ComputahSpeech", linkerSettings: [.linkedLibrary("z")]),
+        .executableTarget(name: "Computah", dependencies: ["ComputahCore", "ComputahSpeech"],
                           resources: [.copy("Resources/Sounds")]),
+        .executableTarget(name: "ComputahCoreChecks", dependencies: ["ComputahCore", "ComputahSpeech"],
+                          path: "Tests/ComputahCoreChecks"),
     ],
     swiftLanguageModes: [.v5]
 )

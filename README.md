@@ -10,9 +10,9 @@ Computah reads the controls that apps provide through macOS Accessibility.
 These controls form an **Accessibility tree**: a hierarchy of windows, buttons,
 text fields, and other interface elements.
 
-Deepgram converts speech to text. TypeSafe's Jev model interprets the command
+The configured speech provider converts speech to text. TypeSafe's Jev model interprets the command
 and chooses the next action. Computah sends the action and checks the result.
-Voice input currently uses Deepgram's English model.
+Voice input supports Volcengine Doubao Streaming Speech Recognition 2.0 and Deepgram.
 
 **This is an experiment.** Some apps provide incomplete controls. The model can
 choose the wrong action. Check the results before you trust Computah with important work.
@@ -25,7 +25,7 @@ and result checks throughout the flow.
 ```mermaid
 flowchart TD
     Start(["START HERE · Turn listening on"]) --> A["Microphone audio"]
-    A --> B["Deepgram Flux converts speech to text"]
+    A --> B["Configured provider converts speech to text"]
     B --> C["Computah receives the final speech turn"]
     C --> D["Read current app controls and task context"]
     D --> E["Group available controls into choices"]
@@ -43,19 +43,20 @@ flowchart TD
 ### 1. Receive speech
 
 When listening is on, Computah converts microphone audio to 16 kHz mono PCM16.
-It streams this audio to Deepgram Flux through a WebSocket connection.
-Deepgram returns transcript updates and events that identify each speech turn.
-A speech turn is one utterance that Deepgram tracks from its start to its end.
+It streams this audio through a WebSocket connection to the configured provider.
+The provider returns transcript updates and metadata that identify each speech turn.
+A speech turn is one utterance tracked from its start to its confirmed end.
 
 Computah checks the session and turn IDs before it accepts an update.
 The notch shows the transcript as you speak.
-Debug Mode also accepts typed commands through the same command controller, without Deepgram.
+Debug Mode also accepts typed commands through the same command controller, without speech recognition.
 
 ### 2. Prepare before speech ends
 
 Deepgram can report that a turn is likely to end before it confirms the final transcript.
 Computah uses this early signal to read controls and ask TypeSafe for a possible action.
 It sends no app input during this preparation.
+Volcengine submits only definite second-pass transcripts and does not use eager preparation.
 
 | Deepgram event | Computah response |
 | --- | --- |
@@ -128,8 +129,10 @@ You need:
 - A Mac with macOS 14 or later.
 - Xcode or Command Line Tools with Swift 6.
 - Python 3 for the build scripts.
-- A [TypeSafe API key](https://docs.typesafe.ai/introduction/quickstart) for commands.
-- A [Deepgram API key](https://developers.deepgram.com/docs/create-additional-api-keys) for voice input.
+- A [TypeSafe API key](https://docs.typesafe.ai/introduction/quickstart) or
+  [OpenRouter API key](https://openrouter.ai/settings/keys) for commands.
+- A Volcengine Speech API key or
+  [Deepgram API key](https://developers.deepgram.com/docs/create-additional-api-keys) for voice input.
 
 The Swift package has no third-party packages. Provider use may have a cost.
 
@@ -140,8 +143,10 @@ cp .env.example .env
 chmod 600 .env
 ```
 
-Open `.env` in your editor. Fill in `TYPESAFE_API_KEY` and `DEEPGRAM_API_KEY`.
-Do not share this file. The Deepgram key is optional if you only use typed commands in Debug Mode.
+Open `.env` in your editor. Select `JEV_PROVIDER=typesafe` or `JEV_PROVIDER=openrouter`,
+then fill in that provider's API key. Select `SPEECH_PROVIDER=volcengine` or
+`SPEECH_PROVIDER=deepgram` and fill in its matching key.
+Do not share this file. A speech key is optional if you only use typed commands in Debug Mode.
 
 Build and open the app:
 
@@ -161,12 +166,12 @@ The app appears at the top of your screen.
 - In Debug Mode, type a command and select **Run**, or press **Return**.
 - Run hides the debug panel while the command executes.
 - Reopen Debug Mode and select a command to see its result, steps, and technical details.
-- Turn on **Track Jev costs** in Debug Mode to save an estimated running total across launches.
-  It starts off. Use **Reset…** to clear the local total. Missing usage is marked incomplete.
+- Jev cost tracking is always on. Debug Mode shows each command and step's provider-reported
+  cost when available, with a token-price estimate as fallback. Use **Reset…** to clear the local total.
 - Use **Quit Computah** in the notch menu to exit.
 
-Computah sends microphone audio to Deepgram while it listens.
-It sends commands and selected app content to TypeSafe.
+Computah sends microphone audio to the configured speech provider while it listens.
+It sends commands and selected app content to the configured Jev provider.
 This content can include document text and private information. See [privacy](docs/PRIVACY.md).
 
 The microphone can pick up computer speakers and nearby voices.
@@ -179,16 +184,19 @@ It does not save command history unless you enable [diagnostic saving](docs/PRIV
 
 ```sh
 zsh scripts/build.sh     # Build outputs/Computah.app.
+swift run ComputahCoreChecks # Check provider, cost, and request-limit logic.
 zsh scripts/run.sh       # Build and open the app. Quit any running copy first.
 ```
 
-The package has two production targets. A target is a module that Swift builds separately.
-`Computah` depends on `ComputahCore`. The core does not depend on the interface or speech code.
+The package has three production targets. A target is a module that Swift builds separately.
+`Computah` depends on `ComputahCore` and `ComputahSpeech`.
+The core does not depend on the interface or speech code.
 Folders within the core organize responsibilities; they are not separate modules.
 
 | Folder | Responsibility |
 | --- | --- |
 | `Sources/Computah` | The notch, debug panel, microphone, and app startup. |
+| `Sources/ComputahSpeech` | Speech-provider configuration and Volcengine protocol codecs. |
 | `Sources/ComputahCore/Accessibility` | Read and group app controls. Send checked native input. |
 | `Sources/ComputahCore/Commands` | Track work, handle new requests, and check results. |
 | `Sources/ComputahCore/Language` | Send typed questions to Jev and check its replies. |

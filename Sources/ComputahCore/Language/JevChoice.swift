@@ -31,11 +31,13 @@ public enum JevFailure: LocalizedError {
     case invalid(String)
     case contextLimit
     case service(Int)
+    case requestLimit(Int)
     public var errorDescription: String? {
         switch self {
         case .invalid(let detail): detail
         case .contextLimit: "Jev context still exceeds its limit after splitting the options."
         case .service(let code): "Jev returned HTTP \(code)."
+        case .requestLimit(let limit): "Jev request limit reached (\(limit)); stopped before another HTTP attempt."
         }
     }
 }
@@ -43,14 +45,23 @@ public enum JevFailure: LocalizedError {
 public struct JevSelector {
     public let apiKey: String
     public let model: String
-    public var endpoint = URL(string: "https://api.typesafe.ai/v1/systemone")!
+    public let credentialName: String
+    public var endpoint: URL
+    public var setupError: String? = nil
+    public var requestBudget: JevRequestBudget? = nil
     public var traceDirectory: URL? = nil
     var usage = ModelUsageTracker()
     public var costs: JevCosts? = nil
     public var session: URLSession
-    public init(apiKey: String, model: String = "jev-1.13.0", session: URLSession = .shared) {
+    public init(
+        apiKey: String, model: String = "jev-1.13.0",
+        endpoint: URL = URL(string: "https://api.typesafe.ai/v1/systemone")!,
+        credentialName: String = "TYPESAFE_API_KEY", session: URLSession = .shared
+    ) {
         self.apiKey = apiKey
         self.model = model
+        self.endpoint = endpoint
+        self.credentialName = credentialName
         self.session = session
     }
 
@@ -174,7 +185,10 @@ public struct JevSelector {
 
     private func send(state: [String: Any], questions: [String: Any], chunks: [[JevOption]], keys: [String], usage callUsage: ModelUsageTracker) async throws -> [Answer] {
         try Task.checkCancellation()
-        guard !apiKey.isEmpty else { throw JevFailure.invalid("Add TYPESAFE_API_KEY to the project-root .env file.") }
+        if let setupError { throw JevFailure.invalid(setupError) }
+        guard !apiKey.isEmpty else {
+            throw JevFailure.invalid("Add \(credentialName) to the project-root .env file.")
+        }
         let body: [String: Any] = ["model": model, "state": state, "questions": questions]
         // Keep identical semantic inputs in the same wire order across processes.
         let data = try JSONSerialization.data(withJSONObject: SensitiveText.json(body), options: [.sortedKeys])
@@ -189,8 +203,9 @@ public struct JevSelector {
             try Task.checkCancellation()
             let responseData: Data
             let response: URLResponse
-            let costTicket = costs?.beginRequest()
+            try requestBudget?.admit()
             usage.beginRequest()
+            let costTicket = costs?.beginRequest()
             callUsage.beginRequest()
             do { (responseData, response) = try await session.data(for: request) }
             catch {
@@ -204,10 +219,14 @@ public struct JevSelector {
                 throw JevFailure.invalid("Jev interpretation request failed after \(attempt + 1) attempt(s): \(error.localizedDescription)")
             }
             let payload = (try? JSONSerialization.jsonObject(with: responseData)) as? [String: Any]
-            let reportedTokens = (payload?["usage"] as? [String: Any])?["input_tokens"] as? Int
-            costs?.received(costTicket, model: payload?["model"] as? String ?? model, inputTokens: reportedTokens)
-            usage.received(inputTokens: reportedTokens)
-            callUsage.received(inputTokens: reportedTokens)
+            let responseUsage = payload?["usage"] as? [String: Any]
+            let reportedTokens = (responseUsage?["input_tokens"] as? NSNumber)?.intValue
+            let reportedCost = (responseUsage?["cost"] as? NSNumber)?.doubleValue
+            costs?.received(
+                costTicket, model: payload?["model"] as? String ?? model,
+                inputTokens: reportedTokens, reportedCostUSD: reportedCost)
+            usage.received(inputTokens: reportedTokens, costUSD: reportedCost)
+            callUsage.received(inputTokens: reportedTokens, costUSD: reportedCost)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             if let traceDirectory {
                 if let responseObject = try? JSONSerialization.jsonObject(with: responseData),

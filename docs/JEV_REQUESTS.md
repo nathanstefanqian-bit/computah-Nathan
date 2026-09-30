@@ -1,6 +1,6 @@
 # What Computah sends to Jev
 
-Computah sends text and named choices to TypeSafe's Jev model.
+Computah sends text and named choices to TypeSafe's Jev model through TypeSafe or OpenRouter.
 The text describes the request, relevant app controls, and observed results.
 Jev selects from the supplied choices. Code checks the answers and operates the Mac.
 
@@ -9,8 +9,10 @@ The examples use fictional app data. They are not saved user sessions.
 
 ## The request format
 
-The default endpoint is `POST https://api.typesafe.ai/v1/systemone`.
-The default model is `jev-1.13.0`.
+The default provider is TypeSafe at `POST https://api.typesafe.ai/v1/systemone`
+with model `jev-1.13.0`.
+Set `JEV_PROVIDER=openrouter` to use `POST https://openrouter.ai/api/alpha/decisions`
+with model `typesafe/jev-1.13`.
 The API key goes in the `Authorization` header.
 
 Each JSON body has three fields:
@@ -253,7 +255,7 @@ An uncertain result does not grant permission to repeat the action.
 ## Data boundaries and inspection
 
 Jev receives no microphone audio or screenshots from this flow.
-Audio goes to Deepgram. Jev receives transcript text and the selected app evidence described above.
+Audio goes to the configured speech provider. Jev receives transcript text and the selected app evidence described above.
 Native Accessibility references and execution permissions stay in the local process.
 
 Labels, text values, window titles, document references, and command history can contain private information.
@@ -265,7 +267,9 @@ For an explicitly enabled diagnostic run, `--trace-dir PATH` saves private reque
 Use an ignored directory under `outputs/`. Do not commit these traces.
 See [Testing](TESTING.md) for diagnostic options.
 
-Optional cost tracking reads provider usage fields at the HTTP boundary.
+Cost tracking reads provider usage fields at the HTTP boundary.
+OpenRouter's `usage.cost` is recorded as actual USD cost.
+When a provider omits cost, Computah labels the token-price calculation as an estimate.
 It does not add model questions or requests.
 
 ## Source map

@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import ComputahCore
+import ComputahSpeech
 
 private let diagnosticTimeoutNanoseconds: UInt64 = 90_000_000_000
 
@@ -54,12 +55,11 @@ extension App {
     func runAudioDiagnostic(_ file: URL) {
         do {
             let pcm = try Data(contentsOf: file)
-            guard !pcm.isEmpty, pcm.count % 2 == 0, pcm.count <= 16_000 * 2 * 60 else {
-                throw AXFailure.unavailable("Audio diagnostic requires at most 60 seconds of raw 16 kHz mono PCM16.")
+            guard !pcm.isEmpty, pcm.count % 2 == 0,
+                  pcm.count <= SpeechDiagnosticLimit.maximumPCMBytes else {
+                throw AXFailure.unavailable("Audio diagnostic requires at most 30 seconds of raw 16 kHz mono PCM16.")
             }
-            guard let key = credential("DEEPGRAM_API_KEY"), !key.isEmpty, !key.contains("\n") else {
-                throw AXFailure.unavailable("Missing Deepgram credential.")
-            }
+            let setup = try speechSetup()
             let started = Date()
             var results: [WorkflowResult] = []
             var turns = DiagnosticTurns()
@@ -85,6 +85,9 @@ extension App {
                     additional: [
                         "speechEvents": speech,
                         "audioSeconds": Double(pcm.count) / 32_000, "inputFinished": inputFinished,
+                        "speechProvider": setup.0.provider.rawValue,
+                        "maxEstimatedSpeechCostCNY": setup.0.provider == .volcengine
+                            ? Double(pcm.count) / 32_000 / 3_600 : 0,
                     ])
             }
             func finishIfReady() {
@@ -119,7 +122,7 @@ extension App {
                     ScenarioStatus(seconds: Date().timeIntervalSince(started), message: message, running: active))
                 if !active { finishIfReady() }
             }
-            voice.start(key: key, diagnosticPCM: pcm)
+            voice.start(configuration: setup.0, key: setup.1, diagnosticPCM: pcm)
             starting = false
             Task {
                 try? await Task.sleep(nanoseconds: diagnosticTimeoutNanoseconds)

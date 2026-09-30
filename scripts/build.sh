@@ -26,7 +26,7 @@ with open(sys.argv[1], 'wb') as output:
         'LSUIElement': True,
         'NSHighResolutionCapable': True,
         'NSPrefersDisplaySafeAreaCompatibilityMode': False,
-        'NSMicrophoneUsageDescription': 'Computah sends microphone audio to Deepgram while dictation is on.',
+        'NSMicrophoneUsageDescription': 'Computah sends microphone audio to your configured speech provider while dictation is on.',
     }, output)
 PY
 # Retain the existing app identity so a rename does not intentionally reset macOS permissions.

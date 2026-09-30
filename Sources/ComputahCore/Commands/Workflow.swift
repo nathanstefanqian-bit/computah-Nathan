@@ -23,6 +23,8 @@ public struct WorkflowEvent: Codable {
     public var captureSeconds: Double = 0
     public var selectionDetails: String? = nil
     public var inputTokens: Int? = nil
+    public var actualCostUSD: Double? = nil
+    public var estimatedCostUSD: Double? = nil
     public var modelSeconds: Double? = nil
     public var preparationSeconds: Double? = nil
     public var recoveryReads: Int? = nil
@@ -41,6 +43,8 @@ public struct WorkflowResult: Codable {
         guard events.allSatisfy({ $0.inputTokens != nil }) else { return nil }
         return events.reduce(0) { $0 + ($1.inputTokens ?? 0) }
     }
+    public var actualCostUSD: Double? { usage?.actualCostUSD }
+    public var estimatedCostUSD: Double? { usage?.estimatedCostUSD }
 }
 
 struct OutcomeJudgment {
@@ -162,6 +166,8 @@ extension CommandEngine {
                         for index in eventStart..<events.count {
                             events[index].requests = usage.requests
                             events[index].inputTokens = usage.inputTokens
+                            events[index].actualCostUSD = usage.actualCostUSD
+                            events[index].estimatedCostUSD = usage.estimatedCostUSD
                             events[index].modelSeconds = prepared.modelSeconds + verificationModelSeconds
                             events[index].captureSeconds = prepared.captureSeconds
                             events[index].preparationSeconds = prepared.preparationSeconds

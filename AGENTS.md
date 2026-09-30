@@ -25,6 +25,13 @@ Computah is one Swift package at the repository root.
   Run them with `--live` only after explicit permission and confirmation of an available Mac.
   Live app/API diagnostics require explicit permission and an available Mac.
   Do not run them as part of cleanup, CI, or routine tests.
+- Before every live test that can call Jev, state the maximum expected cost.
+  A live test process must have a hard limit of at most 3 Jev HTTP attempts, including retries.
+  Do not run a live test without that enforced limit.
+  If the maximum expected cost exceeds $0.005 USD, stop and ask for explicit approval.
+- Keep supplied-audio tests at or below 30 seconds.
+  Before a live Volcengine speech test, state the maximum speech estimate at 1 CNY/hour.
+  Never retry a failed speech test with another provider unless the user separately approves it.
 - Keep credentials only in ignored `.env` at the repository root, with mode `0600`.
   Never print or commit keys, captures, recordings, transcripts, bundles, or personal app content.
 - Save detailed diagnostics only with explicit permission.

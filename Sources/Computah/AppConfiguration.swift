@@ -1,4 +1,5 @@
 import Foundation
+import ComputahSpeech
 
 extension App {
     var recordsDiagnostics: Bool { LaunchOptions.current.contains("--record-diagnostics") }
@@ -37,4 +38,28 @@ extension App {
         return nil
     }
 
+    func speechConfiguration() throws -> SpeechProviderConfiguration {
+        try SpeechProviderConfiguration.resolve(
+            credential("SPEECH_PROVIDER"),
+            resourceID: credential("VOLCENGINE_SPEECH_RESOURCE_ID"))
+    }
+
+    func speechSetup() throws -> (SpeechProviderConfiguration, String) {
+        let configuration = try speechConfiguration()
+        guard let key = credential(configuration.credentialName), !key.contains("\n") else {
+            throw SpeechSetupError.missingCredential(configuration.credentialName)
+        }
+        return (configuration, key)
+    }
+}
+
+enum SpeechSetupError: LocalizedError {
+    case missingCredential(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .missingCredential(let name):
+            return "Add \(name) to the project-root .env file."
+        }
+    }
 }

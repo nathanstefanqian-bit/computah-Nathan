@@ -92,8 +92,11 @@ class SpeechToAppTests(unittest.TestCase):
                           "--report", str(report), "--trace-dir", str(self.folder / "trace")], "computah", timeout=105)
         data = json.loads(report.read_text())
         self.assertEqual(data.get("diagnosticOutcome"), "completed", "The command was not confirmed")
-        self.assertTrue(any(event.get("payload", {}).get("event") == "EndOfTurn"
-                            for event in data.get("speechEvents", [])), "No final Deepgram turn")
+        self.assertTrue(any(
+            event.get("payload", {}).get("event") == "EndOfTurn"
+            or any(utterance.get("definite") is True for utterance in
+                   event.get("payload", {}).get("result", {}).get("utterances", []))
+            for event in data.get("speechEvents", [])), "No final speech turn")
         results = data.get("results", [])
         self.assertTrue(results and results[-1].get("complete") is True, "No completed workflow")
         self.assertTrue(any(result.get("usage", {}).get("requests", 0) > 0 for result in results),

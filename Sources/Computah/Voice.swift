@@ -1,6 +1,6 @@
 import AVFoundation
 import Foundation
-import ComputahCore
+import ComputahSpeech
 
 @MainActor final class Voice {
     var onText: ((String, Bool, String) -> Void)?
@@ -11,6 +11,7 @@ import ComputahCore
     var onStatus: ((String) -> Void)?
     var onLevel: ((Double) -> Void)?
     var onProviderEvent: (([String: Any]) -> Void)?
+    var onUsage: ((SpeechUsage) -> Void)?
     var onDiagnosticInputFinished: (() -> Void)?
     private(set) var isListening = false
     private var engine: AVAudioEngine?
@@ -20,15 +21,19 @@ import ComputahCore
     private var receiver: Task<Void, Never>?
     private var diagnosticProducer: Task<Void, Never>?
     private var audioFeed: AudioFeed?
+    private var providerSession: SpeechProviderSession?
+    private var usageReported = false
     private var generation = UUID()
-    private var turns = SpeechTurnIdentity()
 
-    func start(key: String, diagnosticPCM: Data? = nil) {
+    func start(configuration: SpeechProviderConfiguration, key: String, diagnosticPCM: Data? = nil) {
         guard !isListening else { return }
-        guard !key.isEmpty, !key.contains("\n") else { onStatus?("Add DEEPGRAM_API_KEY to .env."); return }
+        guard !key.isEmpty, !key.contains("\n") else {
+            onStatus?("Add \(configuration.credentialName) to .env.")
+            return
+        }
         generation = UUID()
         let id = generation
-        turns = SpeechTurnIdentity(session: id)
+        usageReported = false
         onStatus?(diagnosticPCM == nil ? "Checking microphone…" : "Starting audio diagnostic…")
         Task {
             if diagnosticPCM == nil, !(await AVCaptureDevice.requestAccess(for: .audio)) {
@@ -36,26 +41,25 @@ import ComputahCore
                 return
             }
             guard generation == id else { return }
-            do { try connect(key: key, id: id, diagnosticPCM: diagnosticPCM) }
+            do {
+                try connect(
+                    configuration: configuration, key: key, id: id,
+                    diagnosticPCM: diagnosticPCM)
+            }
             catch { stop(message: "Microphone could not start: \(error.localizedDescription)") }
         }
     }
 
-    private func connect(key: String, id: UUID, diagnosticPCM: Data?) throws {
-        var components = URLComponents(string: "wss://api.deepgram.com/v2/listen")!
-        components.queryItems = [
-            URLQueryItem(name: "model", value: "flux-general-en"),
-            URLQueryItem(name: "encoding", value: "linear16"),
-            URLQueryItem(name: "sample_rate", value: "16000"),
-            URLQueryItem(name: "eager_eot_threshold", value: "0.5"),
-            URLQueryItem(name: "eot_threshold", value: "0.7"),
-        ]
-        var request = URLRequest(url: components.url!)
-        request.setValue("Token \(key)", forHTTPHeaderField: "Authorization")
-        let session = URLSession(configuration: .ephemeral)
-        let socket = session.webSocketTask(with: request)
-        self.session = session
+    private func connect(
+        configuration: SpeechProviderConfiguration, key: String, id: UUID,
+        diagnosticPCM: Data?
+    ) throws {
+        let providerSession = SpeechSessionFactory.make(configuration: configuration, key: key)
+        let urlSession = URLSession(configuration: .ephemeral)
+        let socket = urlSession.webSocketTask(with: providerSession.request)
+        self.session = urlSession
         self.socket = socket
+        self.providerSession = providerSession
         socket.resume()
 
         let feed = AudioFeed(capacity: 32)
@@ -69,9 +73,17 @@ import ComputahCore
         onStatus?("Listening…")
         sender = Task {
             do {
+                for message in try providerSession.openingMessages() {
+                    try await socket.send(message)
+                }
                 for await chunk in feed.stream {
                     guard generation == id, feed.isIntact else { return }
-                    try await socket.send(.data(chunk))
+                    for message in try providerSession.audioMessages(chunk) {
+                        try await socket.send(message)
+                    }
+                }
+                for message in try providerSession.closingMessages() {
+                    try await socket.send(message)
                 }
                 if diagnosticPCM != nil, generation == id { onDiagnosticInputFinished?() }
             } catch {
@@ -84,7 +96,9 @@ import ComputahCore
             do {
                 while generation == id {
                     let message = try await socket.receive()
-                    if case .string(let text) = message { consume(text, id: id) }
+                    for event in try providerSession.consume(message) {
+                        consume(event, id: id)
+                    }
                 }
             } catch {
                 guard generation == id else { return }
@@ -97,7 +111,9 @@ import ComputahCore
     /// Raw 16 kHz mono signed PCM16, plus trailing silence for provider turn detection.
     private func produceDiagnostic(_ pcm: Data, id: UUID, feed: AudioFeed) {
         diagnosticProducer = Task {
-            let data = pcm + Data(repeating: 0, count: 16_000 * 2 * 8)
+            let maximumBytes = SpeechDiagnosticLimit.maximumPCMBytes
+            let silenceBytes = min(16_000 * 2 * 8, max(0, maximumBytes - pcm.count))
+            let data = pcm + Data(repeating: 0, count: silenceBytes)
             for offset in stride(from: 0, to: data.count, by: 2_560) {
                 guard generation == id, !Task.isCancelled else { return }
                 guard feed.yield(data.subdata(in: offset..<min(offset + 2_560, data.count))) else {
@@ -157,24 +173,15 @@ import ComputahCore
         engine = audio
     }
 
-    private func consume(_ text: String, id: UUID) {
-        guard generation == id, audioFeed?.isIntact == true, let data = text.data(using: .utf8),
-              let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
-        onProviderEvent?(payload)
-        if payload["type"] as? String == "Error" {
-            stop(message: "Deepgram rejected the speech stream.")
-            return
+    private func consume(_ event: SpeechSessionEvent, id: UUID) {
+        guard generation == id, audioFeed?.isIntact == true else { return }
+        switch event {
+        case .provider(let payload): onProviderEvent?(payload)
+        case .turnBegan(let turnID): onTurnBegan?(turnID)
+        case .text(let text, let final, let turnID): onText?(text, final, turnID)
+        case .eager(let text, let turnID): onEager?(text, turnID)
+        case .resumed: onResumed?()
         }
-        guard payload["type"] as? String == "TurnInfo",
-              let turnIndex = payload["turn_index"] as? Int,
-              let turnID = turns.accept(sequence: payload["sequence_id"] as? Int, turn: turnIndex) else { return }
-        let transcript = payload["transcript"] as? String ?? ""
-        let event = payload["event"] as? String
-        if event == "StartOfTurn" { onTurnBegan?(turnID) }
-        if event == "TurnResumed" { onResumed?() }
-        let final = event == "EndOfTurn"
-        if !transcript.isEmpty { onText?(transcript, final, turnID) }
-        if event == "EagerEndOfTurn", !transcript.isEmpty { onEager?(transcript, turnID) }
     }
 
     private func loseAudio(id: UUID) {
@@ -185,6 +192,10 @@ import ComputahCore
 
     func stop(message: String = "Ready") {
         generation = UUID()
+        if !usageReported, let usage = providerSession?.usage {
+            usageReported = true
+            onUsage?(usage)
+        }
         audioFeed?.finish()
         audioFeed = nil
         engine?.inputNode.removeTap(onBus: 0)
@@ -200,6 +211,7 @@ import ComputahCore
         socket = nil
         session?.invalidateAndCancel()
         session = nil
+        providerSession = nil
         isListening = false
         onLevel?(0)
         onStatus?(message)

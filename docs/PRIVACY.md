@@ -2,7 +2,7 @@
 
 ## Data sent to providers
 
-- Deepgram receives microphone audio while listening is on.
+- The configured speech provider receives microphone audio while listening is on.
 - TypeSafe receives commands and selected app content to choose actions and check results.
 - App content can include document text, names, addresses, and other private information.
 
@@ -50,10 +50,12 @@ Quit the app to clear that history.
 
 ## Track Jev costs
 
-**Track Jev costs** in Debug Mode is off by default.
-When enabled, it saves aggregate request counts, input tokens, estimated cost, and the start date.
+Jev cost tracking is always enabled.
+It saves aggregate request counts, input tokens, provider-reported cost, fallback estimated cost,
+and the start date.
 It does not save commands, audio, app content, or API keys.
 The file is `outputs/computah/jev-costs.json` and uses the same private file permissions as diagnostics.
+It does not store commands, app content, or credentials.
 
 The setting and total survive restarts.
 Turning the option off stops counting new requests. Replies to already counted requests can still update the total.
@@ -63,12 +65,20 @@ The history cleanup script keeps this cost file.
 Totals cover requests from this checkout while tracking is enabled, including retries and early preparation.
 Run one Computah instance at a time so separate processes do not overwrite the same total.
 Missing usage after cancellation, failure, or a process exit remains unknown.
-The estimate does not include Deepgram or usage from other clients.
+The estimate does not include speech recognition or usage from other clients.
 
 The current rate for Jev 1.13 is $0.042 per million input tokens. Output tokens are free.
 This public list price was checked on September 25, 2026 against [TypeSafe's model pricing](https://docs.typesafe.ai/models).
 A model without a known price is marked unpriced.
 The estimate can differ from your bill because of missing usage, pricing changes, or account terms.
+
+## Track speech costs
+
+Volcengine speech tracking saves only aggregate session count, audio duration, the start date,
+and a cost estimate at 1 CNY/hour. It does not save audio, transcripts, or API keys.
+The file is `outputs/computah/speech-costs.json`.
+Provider-reported duration is used when available; otherwise the estimate uses bytes sent.
+The estimate is not an invoice and can differ from the account bill.
 
 ## Other diagnostic files
 

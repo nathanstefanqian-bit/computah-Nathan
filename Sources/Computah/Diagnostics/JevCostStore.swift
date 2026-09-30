@@ -18,6 +18,7 @@ import Combine
             do { restored = try JSONDecoder().decode(JevCosts.Total.self, from: Data(contentsOf: file)) }
             catch { failure = "Saved cost totals could not be read. Reset to start a new total." }
         }
+        restored.enabled = true
         total = restored
         tracker = JevCosts(total: restored)
         storageError = failure

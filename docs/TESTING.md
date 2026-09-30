@@ -8,8 +8,8 @@ It also checks the end-to-end runner's Python syntax.
 CI needs no API keys or app permissions. It does not run the live tests.
 A hosted CI run requires you to push the repository.
 
-The project has no unit test suite or Swift test targets.
-A successful build does not prove that commands work.
+Run `swift run ComputahCoreChecks` for focused provider, cost-accounting, and request-budget checks.
+A successful build or core check does not prove that real commands work.
 
 ## End-to-end tests
 
@@ -27,10 +27,10 @@ Each test generates speech locally with the macOS Samantha voice by default.
 Use `--voice Daniel` to check another installed voice.
 The summary records the selected voice.
 The runner converts the audio to PCM16 and sends it through the signed Computah app.
-Computah uses the real Deepgram and Jev connections, then operates the real target app.
+Computah uses the configured real speech and Jev connections, then operates the real target app.
 There are no simulated provider replies or app controls.
 
-The test requires a final Deepgram turn, recorded Jev requests, actual input, and a completed diagnostic report.
+The test requires a final speech turn, recorded Jev requests, actual input, and a completed diagnostic report.
 The document tests also compare object IDs before and after the command through each app's scripting interface.
 Only the new object's content is read for the final text check.
 Text comparison ignores letter case and whitespace formatting.
@@ -50,7 +50,7 @@ These tests create documents, play music, change channels, and navigate Chrome.
 They can send private app content to providers.
 Use them only with explicit permission and an idle, unlocked Mac.
 
-1. Set `TYPESAFE_API_KEY` and `DEEPGRAM_API_KEY` in the ignored root `.env` file.
+1. Set `JEV_PROVIDER`, `SPEECH_PROVIDER`, and their matching API keys in the ignored root `.env` file.
 2. Enable Accessibility access for `outputs/Computah.app`.
 3. Open the apps for the selected tests. Sign in where required.
 4. Pause Spotify before its test.
@@ -78,6 +78,10 @@ If permission is unavailable, the test fails.
 
 The suite runs serially and stops at the first failure.
 It never repeats an uncertain app action to obtain a passing result.
+Each live diagnostic process stops before a fourth Jev HTTP attempt, including retries.
+At the current Jev price and 32K context limit, three maximum-size requests cost at most
+about $0.004032. State this estimate before each live test and ask for approval if the
+project's $0.005 per-test ceiling would be exceeded.
 Each diagnostic has a 90-second deadline. The runner kills its child process if it exceeds 105 seconds.
 If someone starts using the Mac, press **Control+C** to stop the tests.
 The runner kills its active child process. It does not undo input already received by an app.
@@ -139,7 +143,7 @@ Keep reports and captures under ignored `outputs/`.
 | `--hover` | Move the pointer during `--inspect-hits`. This is a live action. |
 | `--command TEXT --report PATH` | Run a command with real providers and app input. Save its result. |
 | `--scenario PATH --report PATH` | Run a series of commands through the normal command controller. |
-| `--audio-pcm PATH --report PATH` | Send supplied audio through Deepgram, Jev, and real app actions. |
+| `--audio-pcm PATH --report PATH` | Send supplied audio through the configured speech provider, Jev, and real app actions. |
 | `--trace-dir PATH` | Save private provider requests and replies for a command run. |
 | `--initial-nodes COUNT` | Change the initial control-read limit for a diagnostic run. |
 | `--physical-activation` | Explicitly use the default physical clicks after target hit testing. |
@@ -194,9 +198,11 @@ AI time is included in those phases. Do not add it to their durations.
 
 ### Supplied audio
 
-Audio input must be raw PCM16, mono, 16 kHz, at most 60 seconds long.
+Audio input must be raw PCM16, mono, 16 kHz, at most 30 seconds long.
 This checks the speech connection and command flow.
 It does not check the physical microphone or prove general speech accuracy.
+At the documented Volcengine rate of 1 CNY/hour, a 30-second test is estimated at no more than
+0.0083 CNY for speech recognition, excluding Jev. State this estimate before each live test.
 
 ## Known limits
 

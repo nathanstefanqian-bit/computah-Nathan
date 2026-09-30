@@ -43,10 +43,18 @@ extension App {
         coordinator.shutdown()
         voice.stop()
         jevCosts.flush()
+        speechCosts.flush()
         var code = outcome.exitCode
         do {
+            var metadata: [String: Any] = [
+                "jevRequestLimit": LaunchOptions.current.isLiveDiagnostic ? LaunchOptions.liveJevRequestLimit : 0,
+                "maxEstimatedJevCostUSD": LaunchOptions.current.isLiveDiagnostic
+                    ? Double(LaunchOptions.liveJevRequestLimit) * 32_000 * JevCosts.inputUSDPerMillion / 1_000_000
+                    : 0,
+            ]
+            metadata.merge(additional) { _, extra in extra }
             let data = try DiagnosticOutput.write(
-                report, outcome: outcome, error: error, additional: additional,
+                report, outcome: outcome, error: error, additional: metadata,
                 to: LaunchOptions.current.value("--report").map { URL(fileURLWithPath: $0) })
             print(String(decoding: data, as: UTF8.self))
         } catch {

@@ -1,8 +1,9 @@
 # Architecture
 
-Computah is one Swift package with two production targets.
+Computah is one Swift package with three production targets.
 A target is a module that Swift builds separately.
 `Computah` owns the app interface and speech input.
+`ComputahSpeech` owns speech-provider configuration and protocol codecs.
 `ComputahCore` reads app controls, asks Jev questions, and runs commands.
 The core does not import the interface or speech code.
 The notch shows transcripts and listening controls. It does not accept keyboard input.
@@ -11,14 +12,16 @@ Folders within the core organize responsibilities. They are not separate modules
 
 ![Read a command, observe controls, use Jev to choose an action, and check the result](images/how-it-works.svg)
 
-See the [README](../README.md#how-it-works) for the full flow from Deepgram to action verification.
+See the [README](../README.md#how-it-works) for the full flow from speech to action verification.
 
 ## Where to start
 
 | File or folder | Purpose |
 | --- | --- |
 | `Computah/App.swift` | Connect speech, Debug Mode command input, execution, and the interface. |
-| `Computah/Voice.swift` | Stream microphone audio to Deepgram and receive text. |
+| `Computah/Voice.swift` | Capture microphone audio and coordinate a provider session. |
+| `Computah/*SpeechSession.swift` | Stream audio to Deepgram or Volcengine and receive text. |
+| `ComputahSpeech` | Resolve speech configuration and encode/decode Volcengine frames. |
 | `Computah/UI` | Show the notch, listening sounds, shortcut, and debug panel. |
 | `Computah/LaunchOptions.swift` | Parse startup options once and reject invalid diagnostic modes. |
 | `Computah/Diagnostics` | Run explicit tests and manage optional saved history. |
@@ -154,12 +157,13 @@ When first opened, the debug panel loads the newest 30 saved report bodies outsi
 It then merges those reports with current results.
 Files are selected by modification time before decoding.
 
-Optional Jev cost accounting runs at the HTTP request boundary, independently of workflow reports.
-A request captures whether tracking is enabled before it is sent.
-Its reply adds provider-reported usage once, even if the command was later replaced.
+Jev cost accounting runs at the HTTP request boundary, independently of workflow reports.
+Its reply adds provider-reported tokens and actual cost once, even if the command was later replaced.
+When actual cost is absent, the tracker records a clearly labeled estimate from the published token price.
 Reset changes the accounting generation so earlier replies cannot refill the cleared total.
 The app saves aggregate totals on a serial background queue. Request processing does not wait for disk writes.
 Unknown usage and unknown model prices remain visible as an incomplete estimate.
+Live diagnostic processes stop before a fourth Jev HTTP attempt.
 
 Routine input auditing is off.
 Explicit scenario and audio diagnostics keep a limited event history.

@@ -34,7 +34,7 @@ Check the key with the provider.
 Never include the key in an issue, screenshot, or log.
 
 Typed commands in Debug Mode need TypeSafe.
-Voice input also needs Deepgram.
+Voice input needs the key matching `SPEECH_PROVIDER`: Volcengine or Deepgram.
 
 ## Start or restart
 

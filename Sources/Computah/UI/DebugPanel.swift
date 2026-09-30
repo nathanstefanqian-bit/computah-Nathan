@@ -22,6 +22,7 @@ import ComputahCore
 struct DebugPanel: View {
     @ObservedObject var state: DebugReviewState
     let costs: JevCostStore
+    let speechCosts: SpeechCostStore
     @State private var selection: String?
     @State private var command = ""
     @FocusState private var commandFocused: Bool
@@ -77,6 +78,7 @@ struct DebugPanel: View {
                         .disabled(command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
                 JevCostView(store: costs)
+                SpeechCostView(store: speechCosts)
                 Text("Run hides this panel while the command executes. Reopen Debug Mode to check the result.")
                     .font(.caption).foregroundStyle(.secondary)
             }.padding(20)
@@ -145,6 +147,7 @@ private struct RunReview: View {
                             metric("Total time", run.elapsed.map(seconds) ?? "—")
                             metric("Steps recorded", run.events.map { String($0.count) } ?? "—")
                             metric("AI attempts", run.requests.map(String.init) ?? "—")
+                            metric("AI cost", cost(actual: run.actualCostUSD, estimated: run.estimatedCostUSD))
                         }
                         Divider()
                         Text("Actions & results").font(.headline)
@@ -181,7 +184,7 @@ private struct RunReview: View {
                         ForEach(Array((run.events ?? []).enumerated()), id: \.offset) { index, event in
                             VStack(alignment: .leading, spacing: 10) {
                                 Text("Step \(index + 1) · \(event.clause.text)").font(.headline)
-                                Text("App read: \(seconds(event.captureSeconds)) · AI time: \(event.modelSeconds.map(seconds) ?? "—")\nAI attempts: \(event.requests) · Input tokens: \(event.inputTokens.map(String.init) ?? "—") · Recovery reads: \(event.recoveryReads.map(String.init) ?? "—")")
+                                Text("App read: \(seconds(event.captureSeconds)) · AI time: \(event.modelSeconds.map(seconds) ?? "—")\nAI attempts: \(event.requests) · Input tokens: \(event.inputTokens.map(String.init) ?? "—") · Cost: \(cost(actual: event.actualCostUSD, estimated: event.estimatedCostUSD)) · Recovery reads: \(event.recoveryReads.map(String.init) ?? "—")")
                                     .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                                 rawDetails("Selection details", event.selectionDetails ?? "No selection details recorded.")
                                 rawDetails("Raw outcome", event.outcome)
@@ -234,6 +237,11 @@ private struct RunReview: View {
     }
 
     private func seconds(_ value: Double) -> String { String(format: "%.2f s", value) }
+    private func cost(actual: Double?, estimated: Double?) -> String {
+        if let actual { return String(format: "$%.8f actual", actual) }
+        if let estimated { return String(format: "$%.8f estimated", estimated) }
+        return "—"
+    }
 
     // Presentation of recorded protocol values only; never interprets user intent.
     private func outcomeLabel(_ value: String) -> String {
@@ -247,6 +255,33 @@ private struct RunReview: View {
     }
 }
 
+struct SpeechCostView: View {
+    @ObservedObject var store: SpeechCostStore
+    @State private var confirmingReset = false
+
+    var body: some View {
+        HStack {
+            Label("Speech usage", systemImage: "waveform")
+                .help("Saves aggregate Volcengine audio duration and a price estimate. No audio or transcripts are stored.")
+            Spacer()
+            if store.total.sessions > 0 {
+                Text(String(
+                    format: "%.1f s · ¥%.6f estimated",
+                    store.total.audioSeconds, store.total.estimatedCNY))
+                    .font(.caption.monospacedDigit())
+                Button("Reset…") { confirmingReset = true }
+            } else {
+                Text("No tracked Volcengine sessions").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .confirmationDialog("Reset the saved speech usage total?", isPresented: $confirmingReset) {
+            Button("Reset total", role: .destructive) { store.reset() }
+        } message: {
+            Text("This clears only the local estimate. It does not change your Volcengine bill.")
+        }
+    }
+}
+
 struct JevCostView: View {
     @ObservedObject var store: JevCostStore
     @State private var confirmingReset = false
@@ -254,12 +289,11 @@ struct JevCostView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Toggle("Track Jev costs", isOn: Binding(get: { store.total.enabled }, set: store.setEnabled))
-                    .toggleStyle(.switch).fixedSize()
-                    .help("Save a running cost estimate across launches. This stores totals only, without commands or app content.")
+                Label("Jev cost tracking is on", systemImage: "dollarsign.circle")
+                    .help("Saves provider-reported costs and fallback estimates across launches. No commands or app content are stored.")
                 Spacer()
                 if store.total.enabled || store.total.requests > 0 {
-                    Text(String(format: "Estimated total: $%.6f USD", store.total.estimatedUSD))
+                    Text(String(format: "Tracked total: $%.6f USD", store.total.totalUSD))
                         .monospacedDigit()
                     Button("Reset…") { confirmingReset = true }
                 }
@@ -267,12 +301,15 @@ struct JevCostView: View {
             if store.total.enabled || store.total.requests > 0 {
                 Text("\(store.total.requests) requests · \(store.total.inputTokens) reported input tokens · Since \(store.total.since.formatted(date: .abbreviated, time: .shortened))")
                     .font(.caption).foregroundStyle(.secondary)
-                if store.total.missingUsage > 0 || store.total.unpricedTokens > 0 {
-                    Text("Incomplete estimate: \(store.total.missingUsage) requests lack reported usage; \(store.total.unpricedTokens) tokens have no known price.")
+                Text(String(format: "Provider-reported: $%.6f · Estimated fallback: $%.6f (%d requests)",
+                            store.total.reportedUSD, store.total.estimatedUSD, store.total.estimatedRequests))
+                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                if store.total.missingUsage > 0 || store.total.unpricedTokens > 0 || store.total.missingCost > 0 {
+                    Text("Incomplete accounting: \(store.total.missingUsage) requests lack token usage; \(store.total.missingCost) lack cost data; \(store.total.unpricedTokens) tokens have no known price.")
                         .font(.caption).foregroundStyle(.orange)
                 }
                 HStack {
-                    Text("\(JevCosts.pricedModel): $\(String(format: "%.3f", JevCosts.inputUSDPerMillion)) / million input tokens. Output is free. \(store.total.enabled ? "" : "Tracking paused.")")
+                    Text("Jev 1.13: $\(String(format: "%.3f", JevCosts.inputUSDPerMillion)) / million input tokens. Output is free. \(store.total.enabled ? "" : "Tracking paused.")")
                     Link("Pricing", destination: URL(string: "https://docs.typesafe.ai/models")!)
                 }.font(.caption).foregroundStyle(.secondary)
             }

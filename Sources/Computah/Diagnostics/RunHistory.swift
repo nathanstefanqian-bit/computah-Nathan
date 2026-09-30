@@ -17,6 +17,8 @@ extension App {
         let action: String?
         let requests: Int?
         let inputTokens: Int?
+        let actualCostUSD: Double?
+        let estimatedCostUSD: Double?
         let elapsed: TimeInterval?
         let recordedAt: Date
         var events: [WorkflowEvent]? = nil
@@ -98,7 +100,7 @@ extension App {
             window.hidesOnDeactivate = false
             window.contentView = NSHostingView(
                 rootView: DebugPanel(
-                    state: debugState, costs: jevCosts,
+                    state: debugState, costs: jevCosts, speechCosts: speechCosts,
                     toggleListening: { [weak self] in self?.toggleVoice() },
                     beginCommand: { [weak self] in self?.beginDebugCommand() },
                     submitCommand: { [weak self] text in self?.submitDebugCommand(text) }))
