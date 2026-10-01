@@ -276,7 +276,7 @@ extension CommandEngine {
                         }
                         let activation = try await activate(
                             launch, prepared: prepared, clause: clause,
-                            prepareStart: prepareStart, referenceContext: checkpoint.read().verificationContext)
+                            prepareStart: prepareStart)
                         verificationModelSeconds = activation.modelSeconds
                         events.append(activation.event)
                         guard activation.verified else {
@@ -485,33 +485,23 @@ extension CommandEngine {
             instructions: LanguagePrompts.text("verify_destination"))
     }
 
-    /// Foregrounding can be the endpoint or a prerequisite; Jev decides from the original goal.
+    /// The route decision already established that this clause requests application activation.
+    /// A combined in-app outcome is classified as controls or split into a later clause.
     private func activate(
         _ launch: InstalledApplication, prepared: PreparedAction,
-        clause: CommandClause, prepareStart: Date, referenceContext: [String: Any]
+        clause: CommandClause, prepareStart: Date
     ) async throws
         -> (verified: Bool, complete: Bool, modelSeconds: Double, event: WorkflowEvent)
     {
         let verified = try await AppRouting.activate(launch, permit: inputPermit)
         let verifyStart = Date()
-        var complete = false
-        var modelSeconds = 0.0
-        var requests = prepared.requests
-        if verified {
-            let judgment = try await activationJudgment(
-                appName: launch.name, goal: prepared.interpretation.map { clause.modelText(in: $0.source) } ?? SensitiveText.redact(clause.text), referenceContext: referenceContext)
-            try inputPermit.check()
-            complete = judgment.id == "complete"
-            modelSeconds = judgment.elapsed
-            requests += judgment.requests
-        }
         let event = WorkflowEvent(
             clause: clause, action: "Open \(launch.name)",
             before: prepared.observation, after: "Foreground verified=\(verified)",
-            outcome: verified ? (complete ? "complete" : "progress") : "unknown",
+            outcome: verified ? "complete" : "unknown",
             selectionSeconds: verifyStart.timeIntervalSince(prepareStart),
-            verificationSeconds: Date().timeIntervalSince(verifyStart), requests: requests)
-        return (verified, complete, modelSeconds, event)
+            verificationSeconds: Date().timeIntervalSince(verifyStart), requests: prepared.requests)
+        return (verified, verified, 0, event)
     }
 
     private func confirmSatisfied(
